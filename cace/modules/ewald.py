@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 from itertools import product
-from typing import Dict
+from typing import Dict, Optional
 import numpy as np
 
 class EwaldPotential(nn.Module):
@@ -45,7 +45,11 @@ class EwaldPotential(nn.Module):
 
         self.charge_neutral_lambda = charge_neutral_lambda
 
-    def forward(self, data: Dict[str, torch.Tensor], **kwargs):
+    def forward(self, data: Dict[str, torch.Tensor],
+                training: bool = None,
+                output_index: Optional[int]=None,
+                ) -> Dict[str, torch.Tensor]:
+        
         if data["batch"] is None:
             n_nodes = data['positions'].shape[0]
             batch_now = torch.zeros(n_nodes, dtype=torch.int64, device=data['positions'].device)
@@ -93,18 +97,16 @@ class EwaldPotential(nn.Module):
                 if isinstance(self.external_field_direction, int):
                     direction_index_now = self.external_field_direction
                     # if self.external_field_direction is a string, then it is the key to the external field
+                elif self.external_field_direction in data and data[self.external_field_direction] is not None:
+                    direction_index_now = int(data[self.external_field_direction][i])
                 else:
-                    try:
-                        direction_index_now = int(data[self.external_field_direction][i])
-                    except:
-                        raise ValueError("external_field_direction must be an integer or a key to the external field")
+                    raise ValueError("external_field_direction must be an integer or a key to the external field")
                 if isinstance(self.external_field, float):
                     external_field_now = self.external_field
+                elif self.external_field in data and data[self.external_field] is not None:
+                    external_field_now = data[self.external_field][i]
                 else:
-                    try:
-                        external_field_now = data[self.external_field][i]
-                    except:
-                        raise ValueError("external_field must be a float or a key to the external field")
+                    raise ValueError("external_field must be a float or a key to the external field")
                 box_now = box_now.diagonal(dim1=-2, dim2=-1)
                 pot_ext = self.add_external_field(r_raw_now, q_now, box_now, direction_index_now, external_field_now)
             else:
@@ -120,12 +122,12 @@ class EwaldPotential(nn.Module):
             results.append(pot + pot_ext + pot_neutral)
             field_results.append(field)
 
-        data[self.output_key] = torch.stack(results, dim=0).sum(axis=1) if self.aggregation_mode == "sum" else torch.stack(results, dim=0)
+        data[self.output_key] = torch.stack(results, dim=0).sum(dim=1) if self.aggregation_mode == "sum" else torch.stack(results, dim=0)
         if self.compute_field:
             data[self.feature_key+'_field'] = torch.cat(field_results, dim=0)
         return data
 
-    def compute_potential_realspace(self, r_raw, q, compute_field=False):
+    def compute_potential_realspace(self, r_raw, q, compute_field:bool =False):
         # Compute pairwise distances (norm of vector differences)
         r_ij = r_raw.unsqueeze(0) - r_raw.unsqueeze(1)
         r_ij_norm = torch.norm(r_ij, dim=-1)
@@ -357,7 +359,7 @@ class EwaldPotential(nn.Module):
         return is_orthorhombic
     
     # Triclinic box(could be orthorhombic)
-    def compute_potential_triclinic(self, r_raw, q, cell_now, compute_field=False):
+    def compute_potential_triclinic(self, r_raw, q, cell_now, compute_field: bool=False):
         device = r_raw.device
 
         cell_inv = torch.linalg.inv(cell_now)
@@ -408,6 +410,8 @@ class EwaldPotential(nn.Module):
                 torch.sqrt(torch.tensor(torch.pi)) * torch.special.erfc(b) + 
                 (1/(2*b**3) - 1/b) * torch.exp(-b_sq)
             )
+        else:
+            raise ValueError("Exponent must be 1 or 6")
         
         # Compute potential, (2π/volume)* sum(factors * kfac * |S(k)|^2)
         volume = torch.det(cell_now)
