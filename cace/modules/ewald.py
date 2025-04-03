@@ -400,6 +400,13 @@ class EwaldPotential(nn.Module):
         exp_ikr = torch.exp(1j * k_dot_r)
         S_k = torch.sum(q * exp_ikr, dim=0)  # [M]
 
+        #for torchscript compatibility, to avoid dtype mismatch, only use real part
+        cos_k_dot_r = torch.cos(k_dot_r)
+        sin_k_dot_r = torch.sin(k_dot_r)
+        S_k_real = torch.sum(q * cos_k_dot_r, dim=0)  # [M]
+        S_k_imag = torch.sum(q * sin_k_dot_r, dim=0)  # [M]
+        S_k_sq = S_k_real**2 + S_k_imag**2  # [M]
+
         # Compute kfac,  exp(-σ^2/2 k^2) / k^2 for exponent = 1
         if self.exponent == 1:
             kfac = torch.exp(-self.sigma_sq_half * k_sq) / k_sq
@@ -415,7 +422,7 @@ class EwaldPotential(nn.Module):
         
         # Compute potential, (2π/volume)* sum(factors * kfac * |S(k)|^2)
         volume = torch.det(cell_now)
-        pot = (factors * kfac * torch.abs(S_k)**2).sum() / volume
+        pot = (factors * kfac * S_k_sq).sum() / volume
         
         # Compute electric field if needed
         q_field = torch.zeros_like(q, dtype=r_raw.dtype, device=device)
