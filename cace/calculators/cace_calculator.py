@@ -42,7 +42,7 @@ class CACECalculator(Calculator):
         keep_neutral: bool = True, # to keep BEC sum to be neutral
         atomic_energies: dict = None,
         output_index: int = None, # only used for multi-output models
-        cutoff: float = None, #only for combined potential
+        cutoff: float = None, #only for torchscripting combined potential
         **kwargs,
         ):
 

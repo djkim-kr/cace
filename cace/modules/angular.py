@@ -16,6 +16,7 @@ import torch
 import torch.nn as nn
 from collections import OrderedDict
 
+#for torchscript compatibility, use string instead of tuple
 class AngularComponent(nn.Module):
     """ Angular component of the edge basis functions
         Optimized for CPU usage (use recursive formula)

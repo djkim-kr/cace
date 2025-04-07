@@ -57,6 +57,7 @@ class AtomisticModel(nn.Module):
     def initialize_derivatives(
         self, data: Dict[str, torch.Tensor]
     ) -> Dict[str, torch.Tensor]:
+        # for torchscript compatibility
         for p in self.required_derivatives:
             if p in data.keys():
                 data[p].requires_grad_(True)
