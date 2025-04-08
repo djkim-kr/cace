@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 from itertools import product
-from typing import Dict, Optional
+from typing import Dict, Optional, Tuple
 import numpy as np
 
 class EwaldPotential(nn.Module):
@@ -56,12 +56,6 @@ class EwaldPotential(nn.Module):
         else:
             batch_now = data["batch"]
 
-        # this is just for compatibility with the previous version
-        if hasattr(self, 'exponent') == False:
-            self.exponent = 1
-        if hasattr(self, 'compute_field') == False:
-            self.compute_field = False
-        
         # box = data['cell'].view(-1, 3, 3).diagonal(dim1=-2, dim2=-1)
         box = data['cell'].view(-1, 3, 3)
         r = data['positions']
@@ -76,56 +70,125 @@ class EwaldPotential(nn.Module):
 
         unique_batches = torch.unique(batch_now)  # Get unique batch indices
 
-        results = []
-        field_results = []
-        for i in unique_batches:
-            mask = batch_now == i  # Create a mask for the i-th configuration
-            # Calculate the potential energy for the i-th configuration
-            r_raw_now, q_now, box_now = r[mask], q[mask], box[i]
-            box_diag = box[i].diagonal(dim1=-2, dim2=-1)
-            if box_diag[0] < 1e-6 and box_diag[1] < 1e-6 and box_diag[2] < 1e-6 and self.exponent == 1:
-                # the box is not periodic, we use the direct sum
-                pot, field = self.compute_potential_realspace(r_raw_now, q_now, self.compute_field)
-            elif box_diag[0] > 0 and box_diag[1] > 0 and box_diag[2] > 0:
-                # the box is periodic, we use the reciprocal sum
-                pot, field = self.compute_potential_triclinic(r_raw_now, q_now, box_now, self.compute_field)
-            else:
-                raise ValueError("Either all box dimensions must be positive or aperiodic box must be provided.")
+        # this is just for compatibility with the previous version
+        if hasattr(self, 'exponent') == False:
+            self.exponent = 1
+        if hasattr(self, 'compute_field') == False:
+            self.compute_field = False
 
-            if self.exponent == 1 and hasattr(self, 'external_field') and self.external_field is not None:
-                # if self.external_field_direction is an integer, then external_field_direction is the direction index
-                if isinstance(self.external_field_direction, int):
-                    direction_index_now = self.external_field_direction
-                    # if self.external_field_direction is a string, then it is the key to the external field
-                elif self.external_field_direction in data and data[self.external_field_direction] is not None:
-                    direction_index_now = int(data[self.external_field_direction][i])
-                else:
-                    raise ValueError("external_field_direction must be an integer or a key to the external field")
-                if isinstance(self.external_field, float):
-                    external_field_now = self.external_field
-                elif self.external_field in data and data[self.external_field] is not None:
-                    external_field_now = data[self.external_field][i]
-                else:
-                    raise ValueError("external_field must be a float or a key to the external field")
-                box_now = box_now.diagonal(dim1=-2, dim2=-1)
-                pot_ext = self.add_external_field(r_raw_now, q_now, box_now, direction_index_now, external_field_now)
-            else:
-                pot_ext = 0.0
+        # 각 배치의 계산을 fork로 비동기 실행
+        futures = [torch.jit.fork(self._compute_for_configuration,
+                                    r[batch_now == b],
+                                    q[batch_now == b],
+                                    box[b],
+                                    data,
+                                    int(b))
+                for b in unique_batches]
+        # fork된 작업의 결과를 기다림
+        batch_results = [torch.jit.wait(f) for f in futures]
 
-            if hasattr(self, 'charge_neutral_lambda') and self.charge_neutral_lambda is not None:
-                q_mean = torch.mean(q[mask])
-                pot_neutral = self.charge_neutral_lambda * (q_mean)**2.
-                #print(pot_neutral, pot)
-            else:
-                pot_neutral = 0.0
+        pot_list = [result[0] for result in batch_results]
+        field_list = [result[1] for result in batch_results]
 
-            results.append(pot + pot_ext + pot_neutral)
-            field_results.append(field)
-
-        data[self.output_key] = torch.stack(results, dim=0).sum(dim=1) if self.aggregation_mode == "sum" else torch.stack(results, dim=0)
+        data[self.output_key] = torch.stack(pot_list, dim=0).sum(dim=1)
         if self.compute_field:
-            data[self.feature_key+'_field'] = torch.cat(field_results, dim=0)
+            data[self.feature_key+'_field'] = torch.cat(field_list, dim=0)
         return data
+
+    def _compute_for_configuration(self,
+                               r_config: torch.Tensor,
+                               q_config: torch.Tensor,
+                               box_config: torch.Tensor,
+                               data: Dict[str, torch.Tensor],
+                               batch_index: int) -> Tuple[torch.Tensor, torch.Tensor]:
+        box_diag = box_config.diagonal(dim1=-2, dim2=-1)
+        if box_diag[0] < 1e-6 and box_diag[1] < 1e-6 and box_diag[2] < 1e-6 and self.exponent == 1:
+            # the box is not periodic, we use the direct sum
+            pot, field = self.compute_potential_realspace(r_config, q_config, self.compute_field)
+        elif box_diag[0] > 0 and box_diag[1] > 0 and box_diag[2] > 0:
+            # the box is periodic, we use the reciprocal sum
+            pot, field = self.compute_potential_triclinic(r_config, q_config, box_config, self.compute_field)
+        else:
+            raise ValueError("Either all box dimensions must be positive or aperiodic box must be provided.")
+        
+        if self.exponent == 1 and hasattr(self, 'external_field') and self.external_field is not None:
+            # if self.external_field_direction is an integer, then external_field_direction is the direction index
+            if isinstance(self.external_field_direction, int):
+                direction_index_now = self.external_field_direction
+                # if self.external_field_direction is a string, then it is the key to the external field
+            elif self.external_field_direction in data and data[self.external_field_direction] is not None:
+                direction_index_now = int(data[self.external_field_direction][batch_index])
+            else:
+                raise ValueError("external_field_direction must be an integer or a key to the external field")
+            if isinstance(self.external_field, float):
+                external_field_now = self.external_field
+            elif self.external_field in data and data[self.external_field] is not None:
+                external_field_now = data[self.external_field][batch_index]
+            else:
+                raise ValueError("external_field must be a float or a key to the external field")
+            box_now = box_config.diagonal(dim1=-2, dim2=-1)
+            pot_ext = self.add_external_field(r_config, q_config, box_now, direction_index_now, external_field_now)
+        else:
+            pot_ext = 0.0
+
+        if hasattr(self, 'charge_neutral_lambda') and self.charge_neutral_lambda is not None:
+            q_mean = torch.mean(q_config)
+            pot_neutral = self.charge_neutral_lambda * (q_mean)**2.
+        else:
+            pot_neutral = 0.0
+
+        return pot + pot_ext + pot_neutral, field
+
+        # results = []
+        # field_results = []
+        # for i in unique_batches:
+        #     mask = batch_now == i  # Create a mask for the i-th configuration
+        #     # Calculate the potential energy for the i-th configuration
+        #     r_raw_now, q_now, box_now = r[mask], q[mask], box[i]
+        #     box_diag = box[i].diagonal(dim1=-2, dim2=-1)
+        #     if box_diag[0] < 1e-6 and box_diag[1] < 1e-6 and box_diag[2] < 1e-6 and self.exponent == 1:
+        #         # the box is not periodic, we use the direct sum
+        #         pot, field = self.compute_potential_realspace(r_raw_now, q_now, self.compute_field)
+        #     elif box_diag[0] > 0 and box_diag[1] > 0 and box_diag[2] > 0:
+        #         # the box is periodic, we use the reciprocal sum
+        #         pot, field = self.compute_potential_triclinic(r_raw_now, q_now, box_now, self.compute_field)
+        #     else:
+        #         raise ValueError("Either all box dimensions must be positive or aperiodic box must be provided.")
+
+        #     if self.exponent == 1 and hasattr(self, 'external_field') and self.external_field is not None:
+        #         # if self.external_field_direction is an integer, then external_field_direction is the direction index
+        #         if isinstance(self.external_field_direction, int):
+        #             direction_index_now = self.external_field_direction
+        #             # if self.external_field_direction is a string, then it is the key to the external field
+        #         elif self.external_field_direction in data and data[self.external_field_direction] is not None:
+        #             direction_index_now = int(data[self.external_field_direction][i])
+        #         else:
+        #             raise ValueError("external_field_direction must be an integer or a key to the external field")
+        #         if isinstance(self.external_field, float):
+        #             external_field_now = self.external_field
+        #         elif self.external_field in data and data[self.external_field] is not None:
+        #             external_field_now = data[self.external_field][i]
+        #         else:
+        #             raise ValueError("external_field must be a float or a key to the external field")
+        #         box_now = box_now.diagonal(dim1=-2, dim2=-1)
+        #         pot_ext = self.add_external_field(r_raw_now, q_now, box_now, direction_index_now, external_field_now)
+        #     else:
+        #         pot_ext = 0.0
+
+        #     if hasattr(self, 'charge_neutral_lambda') and self.charge_neutral_lambda is not None:
+        #         q_mean = torch.mean(q[mask])
+        #         pot_neutral = self.charge_neutral_lambda * (q_mean)**2.
+        #         #print(pot_neutral, pot)
+        #     else:
+        #         pot_neutral = 0.0
+
+        #     results.append(pot + pot_ext + pot_neutral)
+        #     field_results.append(field)
+
+        # data[self.output_key] = torch.stack(results, dim=0).sum(dim=1) if self.aggregation_mode == "sum" else torch.stack(results, dim=0)
+        # if self.compute_field:
+        #     data[self.feature_key+'_field'] = torch.cat(field_results, dim=0)
+        # return data
 
     def compute_potential_realspace(self, r_raw, q, compute_field:bool =False):
         # Compute pairwise distances (norm of vector differences)
