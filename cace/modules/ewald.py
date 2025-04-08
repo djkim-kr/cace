@@ -75,8 +75,7 @@ class EwaldPotential(nn.Module):
             self.exponent = 1
         if hasattr(self, 'compute_field') == False:
             self.compute_field = False
-
-        # 각 배치의 계산을 fork로 비동기 실행
+        #torch.jit.fork/wait -> asyncchrounously GPU kernel(parallel)
         futures = [torch.jit.fork(self._compute_for_configuration,
                                     r[batch_now == b],
                                     q[batch_now == b],
@@ -84,7 +83,6 @@ class EwaldPotential(nn.Module):
                                     data,
                                     int(b))
                 for b in unique_batches]
-        # fork된 작업의 결과를 기다림
         batch_results = [torch.jit.wait(f) for f in futures]
 
         pot_list = [result[0] for result in batch_results]
