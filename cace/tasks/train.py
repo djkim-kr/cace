@@ -272,23 +272,36 @@ class TrainingTask(nn.Module):
         return [batches[i] for i in indices]
 
     def save_model(self, path: str, device: torch.device = torch.device('cpu')):
-        if self.ema and self.global_step >= self.ema_start: 
-            torch.save(self.ema_model.module.to(device), path)
+        if self.ema and self.global_step >= self.ema_start:
+            try:
+                torch.save(self.ema_model.module.to(device), path)
+            except:
+                scripted_model = torch.jit.script(self.ema_model.module).to(device)
+                torch.jit.save(scripted_model, path)
             if device != self.device:
                 self.ema_model.module.to(self.device)
         else:
-            torch.save(self.model.to(device), path)
+            try:
+                torch.save(self.model.to(device), path)
+            except:
+                scripted_model = torch.jit.script(self.model).to(device)
+                torch.jit.save(scripted_model, path)
             if device != self.device:
                 self.model.to(self.device)
 
     def checkpoint(self, path: str):
-        torch.save({
+        check = {
             'model_state_dict': self.model.state_dict(),
             'model_ema_state_dict': self.ema_model.state_dict() if self.ema and self.global_step >= self.ema_start else None,
             'model_swa_state_dict': self.swa_model.state_dict() if self.swa and self.global_step >= self.swa_start else None,
             'optimizer_state_dict': self.optimizer.state_dict(),
             'scheduler_state_dict': self.scheduler.state_dict() if self.scheduler else None,
-        }, path)
+        }
+        try: 
+            torch.save(check, path)
+        except:
+            jit_check = torch.jit.script(check).to(self.device)
+            torch.jit.save(jit_check, path)
 
     def load_state_dict(self, state_dict):
         self.model.load_state_dict(state_dict['model_state_dict'])
