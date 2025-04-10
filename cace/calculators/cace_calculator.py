@@ -56,7 +56,10 @@ class CACECalculator(Calculator):
         self.results = {}
 
         if isinstance(model_path, str):
-            self.model = torch.load(f=model_path, map_location=device)
+            try:
+                self.model = torch.load(f=model_path, map_location=device)
+            except:
+                self.model = torch.jit.load(f=model_path, map_location=device)
         elif isinstance(model_path, torch.nn.Module):
             self.model = model_path
         else:
