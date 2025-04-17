@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from typing import Dict, Sequence, Union
+from typing import Dict, Sequence, Union, Optional
 
 __all__ = ['LesWrapper']
 
@@ -46,7 +46,9 @@ class LesWrapper(nn.Module):
     def set_bec_output_index(self, bec_output_index: int):
         self.bec_output_index = bec_output_index
 
-    def forward(self, data: Dict[str, torch.Tensor], **kwargs) -> Dict[str, torch.Tensor]:
+    def forward(self, data: Dict[str, torch.Tensor],
+                training: bool = None,
+                output_index: Optional[int]=None,) -> Dict[str, torch.Tensor]:
 
         # reshape the feature vectors
         if isinstance(self.feature_key, str):
@@ -66,9 +68,16 @@ class LesWrapper(nn.Module):
             bec_output_index=self.bec_output_index,
             )
 
-        data[self.charge_key] = result['latent_charges']
+        latent_charges_tensor = result['latent_charges']
+        assert latent_charges_tensor is not None, "latent charges are None"
+        data[self.charge_key] = latent_charges_tensor
+
         if self.compute_energy:
-            data[self.energy_key] = result['E_lr']
+            E_lr_tensor = result['E_lr']
+            assert E_lr_tensor is not None, "E_lr is None"
+            data[self.energy_key] = E_lr_tensor
         if self.compute_bec:
-            data[self.bec_key] = result['BEC']
+            BEC_tensor = result['BEC']
+            assert BEC_tensor is not None, "BEC is None"
+            data[self.bec_key] = BEC_tensor
         return data
