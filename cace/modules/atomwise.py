@@ -61,11 +61,13 @@ class Atomwise(nn.Module):
             self.model_outputs.append(self.per_atom_output_key)
         if self.descriptor_output_key is not None: 
             self.model_outputs.append(self.descriptor_output_key)
+        
 
         self.predict_f = predict_f
-        if self.predict_f:
+        if self.predict_f and q_redistribution_weight_key is not None:
             self.q_redistribution_weight_key = q_redistribution_weight_key
             self.n_out = n_out + 1
+            self.model_outputs.append(self.q_redistribution_weight_key)
         else:
             self.n_out = n_out
 

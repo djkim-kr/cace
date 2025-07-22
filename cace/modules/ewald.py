@@ -21,6 +21,7 @@ class EwaldPotential(nn.Module):
                  compute_field: bool = False,
                  charge_redistribution: bool = False,
                  weight_key: str = 'f',
+                 redistributed_charge_key: str = 'q_re'
                  ):
         super().__init__()
         self.dl = dl
@@ -52,6 +53,10 @@ class EwaldPotential(nn.Module):
         self.system_charge = system_charge
         self.charge_redistribution = charge_redistribution
         self.weight_key = weight_key
+        if self.charge_redistribution and self.weight_key is not None:
+            self.redistributed_charge_key = redistributed_charge_key
+            self.model_outputs.append(redistributed_charge_key)
+            self.model_outputs.append(redistributed_charge_key + '_sum')
         self.required_derivatives = []
         self.required_derivatives.append('cell')
 
@@ -87,7 +92,9 @@ class EwaldPotential(nn.Module):
                 f_b = f[mask]
                 q_new[mask] = q_b + f_b * (Q_target - q_b.sum(dim=0))
             q = q_new
-
+            data[self.redistributed_charge_key] = q_new
+            q_new_sum = q_new.sum(axis=0)
+            data[self.redistributed_charge_key + '_sum'] = q_new_sum
         # print('q_new', q.sum(axis=0))
         # print(q.shape)
 
@@ -152,10 +159,10 @@ class EwaldPotential(nn.Module):
 
             # results.append(pot + pot_ext + pot_neutral)
             results.append(pot + pot_ext + pot_neutral + pot_penalty)
-            print('pot:', pot)
+            # print('pot:', pot)
             # print('pot_ext:', pot_ext)
             # print('pot_neutral:', pot_neutral)
-            print('pot_penalty:', pot_penalty)
+            # print('pot_penalty:', pot_penalty)
             field_results.append(field)
 
         data[self.output_key] = torch.stack(results, dim=0).sum(axis=1) if self.aggregation_mode == "sum" else torch.stack(results, dim=0)
