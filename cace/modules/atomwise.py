@@ -31,7 +31,9 @@ class Atomwise(nn.Module):
         residual: bool = False,
         use_batchnorm: bool = False,
         add_linear_nn: bool = False,
-        post_process: Optional[Callable] = None
+        post_process: Optional[Callable] = None,
+        predict_f: bool = False,
+        q_redistribution_weight_key : str = 'f',
     ):
         """
         Args:
@@ -60,7 +62,12 @@ class Atomwise(nn.Module):
         if self.descriptor_output_key is not None: 
             self.model_outputs.append(self.descriptor_output_key)
 
-        self.n_out = n_out
+        self.predict_f = predict_f
+        if self.predict_f:
+            self.q_redistribution_weight_key = q_redistribution_weight_key
+            self.n_out = n_out + 1
+        else:
+            self.n_out = n_out
 
         if aggregation_mode is None and self.per_atom_output_key is None:
             raise ValueError(
@@ -69,7 +76,7 @@ class Atomwise(nn.Module):
             )
 
         self.n_in = n_in
-        self.n_out = n_out
+        # self.n_out = n_out
         self.n_hidden = n_hidden
         self.n_layers = n_layers
         self.activation = activation
@@ -156,6 +163,24 @@ class Atomwise(nn.Module):
         y = self.outnet(features)
         if self.add_linear_nn:
             y += self.linear_nn(features)
+
+        if self.predict_f is True:
+            # print(y[0])
+            f_raw = y[:, -1:]
+            y = y[:, :-1]   
+            # print(f_part.shape, y.shape)
+            # print(f_part[0], y[0])
+            # print(f_raw[0:3])
+            f_pos = F.softplus(f_raw) + 1e-6
+            # print(f_pos[0:3])
+            f_norm = torch.zeros_like(f_pos)
+            unique_batch = torch.unique(data["batch"])
+            for b in unique_batch:
+                mask = data["batch"] == b
+                f_norm[mask] = torch.softmax(f_pos[mask], dim=0)
+            # print(f_norm.shape, f_norm[0:3])
+            data[self.q_redistribution_weight_key] = f_norm
+            # print(f_norm.sum(axis=0))
 
         # accumulate the per-atom output if necessary
         if self.per_atom_output_key is not None:

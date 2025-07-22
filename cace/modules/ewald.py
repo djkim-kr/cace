@@ -12,11 +12,15 @@ class EwaldPotential(nn.Module):
                  external_field = None, # external field
                  external_field_direction: int = 0, # external field direction, 0 for x, 1 for y, 2 for z
                  charge_neutral_lambda: float = None,
+                 charge_eq_lambda: float = None,
+                 system_charge: int = 0,
                  remove_self_interaction=True,
                  feature_key: str = 'q',
                  output_key: str = 'ewald_potential',
                  aggregation_mode: str = "sum",
                  compute_field: bool = False,
+                 charge_redistribution: bool = False,
+                 weight_key: str = 'f',
                  ):
         super().__init__()
         self.dl = dl
@@ -44,6 +48,10 @@ class EwaldPotential(nn.Module):
             self.model_outputs.append(feature_key+'_field')
 
         self.charge_neutral_lambda = charge_neutral_lambda
+        self.charge_eq_lambda = charge_eq_lambda
+        self.system_charge = system_charge
+        self.charge_redistribution = charge_redistribution
+        self.weight_key = weight_key
         self.required_derivatives = []
         self.required_derivatives.append('cell')
 
@@ -66,6 +74,22 @@ class EwaldPotential(nn.Module):
         q = data[self.feature_key]
         if q.dim() == 1:
             q = q.unsqueeze(1)
+
+        # print('q_sum', q.sum(axis=0))
+        # print('q.shape', q.shape)
+        if hasattr(self, 'charge_redistribution') and self.charge_redistribution is True:
+            f = data[self.weight_key]
+            Q_target = self.system_charge
+            q_new = q.clone()
+            for b in torch.unique(batch_now):
+                mask = batch_now == b
+                q_b = q[mask]
+                f_b = f[mask]
+                q_new[mask] = q_b + f_b * (Q_target - q_b.sum(dim=0))
+            q = q_new
+
+        # print('q_new', q.sum(axis=0))
+        # print(q.shape)
 
         # Check the input dimension
         n, d = r.shape
@@ -113,13 +137,25 @@ class EwaldPotential(nn.Module):
                 pot_ext = 0.0
 
             if hasattr(self, 'charge_neutral_lambda') and self.charge_neutral_lambda is not None:
-                q_mean = torch.mean(q[mask])
+                q_mean = torch.mean(q_now)
                 pot_neutral = self.charge_neutral_lambda * (q_mean)**2.
                 #print(pot_neutral, pot)
             else:
                 pot_neutral = 0.0
 
-            results.append(pot + pot_ext + pot_neutral)
+            if hasattr(self, 'charge_eq_lambda') and self.charge_eq_lambda is not None:
+                q_sum = torch.sum(q_now)
+                Q = self.system_charge
+                pot_penalty = self.charge_eq_lambda * (Q - q_sum)**2.
+            else:
+                pot_penalty = 0.0
+
+            # results.append(pot + pot_ext + pot_neutral)
+            results.append(pot + pot_ext + pot_neutral + pot_penalty)
+            print('pot:', pot)
+            # print('pot_ext:', pot_ext)
+            # print('pot_neutral:', pot_neutral)
+            print('pot_penalty:', pot_penalty)
             field_results.append(field)
 
         data[self.output_key] = torch.stack(results, dim=0).sum(axis=1) if self.aggregation_mode == "sum" else torch.stack(results, dim=0)
