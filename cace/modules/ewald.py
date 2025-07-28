@@ -50,7 +50,7 @@ class EwaldPotential(nn.Module):
 
         self.charge_neutral_lambda = charge_neutral_lambda
         self.charge_eq_lambda = charge_eq_lambda
-        self.system_charge = system_charge
+        self.system_charge = system_charge * 9.48933
         self.charge_redistribution = charge_redistribution
         self.weight_key = weight_key
         if self.charge_redistribution and self.weight_key is not None:
