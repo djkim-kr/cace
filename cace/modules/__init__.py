@@ -39,3 +39,5 @@ from .polarization import *
 from .grad import *
 
 from .les_wrapper import *
+
+from .charge_eq import *
