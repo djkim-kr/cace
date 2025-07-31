@@ -108,9 +108,13 @@ class ChargeEq(nn.Module):
         if all_q_eq.dim() == 1:
             all_q_eq = all_q_eq.unsqueeze(1)
         data[self.output_key] = all_q_eq
-        data[self.ewald_key] = torch.stack(ewald_results, dim=0).sum(axis=1) if self.aggregation_mode == "sum" else torch.stack(ewald_results, dim=0)
-        # print('data[self.ewald_key].shape:', data[self.ewald_key].shape)
-        print('J_raw', J_raw.tolist())
+        all_ewald = torch.stack(ewald_results, dim=0).sum(axis=1) if self.aggregation_mode == "sum" else torch.stack(ewald_results, dim=0)
+        if all_ewald.dim() != 1:
+            all_ewald = all_ewald.squeeze(-1)
+        data[self.ewald_key] = all_ewald
+        print('data[self.ewald_key].shape:', data[self.ewald_key].shape)
+        print('data[self.ewald_key]:', data[self.ewald_key])
+        print('J_raw', J_raw)
 
         return data
 
