@@ -129,7 +129,7 @@ class ChargeEq(nn.Module):
         data[self.ewald_key] = all_ewald
         # print('data[self.ewald_key].shape:', data[self.ewald_key].shape)
         # print('data[self.ewald_key]:', data[self.ewald_key])
-        print('J_raw', J_raw)
+        # print('J_raw', J_raw)
 
         return data
 

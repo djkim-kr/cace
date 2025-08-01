@@ -186,6 +186,8 @@ class Atomwise(nn.Module):
 
         # accumulate the per-atom output if necessary
         if self.per_atom_output_key is not None:
+            if hasattr(self, "post_process") and self.post_process is not None:
+                y = self.post_process(y)
             data[self.per_atom_output_key] = y
 
         if hasattr(self, "descriptor_output_key") and self.descriptor_output_key is not None:
@@ -201,7 +203,6 @@ class Atomwise(nn.Module):
 
             if self.aggregation_mode == "avg":
                 y = y / torch.bincount(data['batch'])
-
         if hasattr(self, "post_process") and self.post_process is not None:
             y = self.post_process(y)
         data[self.output_key] = y[:, output_index] if output_index is not None else y
