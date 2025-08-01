@@ -19,6 +19,7 @@ class ChargeEq(nn.Module):
                  compute_field: bool = True,
                  norm_factor: float = (1./90.0474)**0.5, 
                  scaling_factor: float = 1.0,
+                 system_charge_key: str = 'system_charge',  # Key for system charge in data
                  # the standard normal factor in accordance with the cace convention used in ewald.py
                  ):
         super().__init__()
@@ -32,6 +33,7 @@ class ChargeEq(nn.Module):
         self.compute_field = compute_field
         self.system_charge = system_charge
         self.aggregation_mode = aggregation_mode
+        self.system_charge_key = system_charge_key
 
         self.ep = EwaldPotential(
             dl=dl,
@@ -79,15 +81,28 @@ class ChargeEq(nn.Module):
 
         unique_batches = torch.unique(batch_now)  # Get unique batch indices
 
+        if (self.system_charge_key not in data or data[self.system_charge_key] is None
+            ) and self.system_charge is not None:
+            system_charge = self.system_charge
+            system_charge = torch.full((len(unique_batches),), 
+                                       system_charge, device=data['positions'].device)
+            # print('system_charge from class:', system_charge)
+        else:
+            # print('system_charge from data:', data[self.system_charge_key])
+            system_charge = data[self.system_charge_key]
+
+
         results = []
         ewald_results = []
 
         for i in unique_batches:
             mask = batch_now == i  # Create a mask for the i-th configuration
             r_now, chi_now, box_now = r[mask], chi[mask], box[i]
+            system_charge_now = system_charge[i]
+            # print(f"Processing batch {i}, system_charge: {system_charge_now}")
             J_i_now = J_i[mask]
             A_now = self._compute_A_matrix(r_now, box_now)
-            q_eq, lambda_eq = self._compute_q_eq(A_now, chi_now, J_i_now, self.system_charge)
+            q_eq, lambda_eq = self._compute_q_eq(A_now, chi_now, J_i_now, system_charge_now)
             results.append(q_eq)
             ewald_energy = 0.5 * q_eq.unsqueeze(1).T @ A_now @ q_eq.unsqueeze(1)
             ewald_results.append(ewald_energy)
@@ -112,8 +127,8 @@ class ChargeEq(nn.Module):
         if all_ewald.dim() != 1:
             all_ewald = all_ewald.squeeze(-1)
         data[self.ewald_key] = all_ewald
-        print('data[self.ewald_key].shape:', data[self.ewald_key].shape)
-        print('data[self.ewald_key]:', data[self.ewald_key])
+        # print('data[self.ewald_key].shape:', data[self.ewald_key].shape)
+        # print('data[self.ewald_key]:', data[self.ewald_key])
         print('J_raw', J_raw)
 
         return data
@@ -127,7 +142,7 @@ class ChargeEq(nn.Module):
 
         return A_mat
 
-    def _compute_q_eq(self, A_mat, chi, J, system_charge):
+    def _compute_q_eq(self, A_mat, chi, J, system_Q):
         device, dtype = A_mat.device, A_mat.dtype
         N_atoms = A_mat.size(0)
         A_plus_J = A_mat + torch.diag(J.to(dtype))
@@ -136,7 +151,7 @@ class ChargeEq(nn.Module):
         coeffs[:N_atoms, :N_atoms] = A_plus_J
         coeffs[N_atoms,  N_atoms]  = 0.0
         # print('coeffs.shape:', coeffs.shape)
-        Q_tot = system_charge / self.normalization_factor # normalized to be consistent with ewald.py
+        Q_tot = system_Q / self.normalization_factor # normalized to be consistent with ewald.py
         chi_vector = torch.cat([-chi.view(-1),
                                 torch.tensor([Q_tot], device=device, dtype=dtype)])
         # print('chi_vector.shape:', chi_vector.shape)
