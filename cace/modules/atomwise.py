@@ -172,9 +172,7 @@ class Atomwise(nn.Module):
 
         # accumulate the per-atom output if necessary
         if self.per_atom_output_key is not None:
-            if self.energy_output_index is not None:
-                a = y[:, self.energy_output_index]
-                data[self.per_atom_output_key] = a
+            data[self.per_atom_output_key] = y
 
         if self.per_atom_output_key_2 is not None:
             if self.charge_output_index is not None:
