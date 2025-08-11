@@ -263,7 +263,9 @@ class Atomwise_linear(nn.Module):
         else:
             assert self.n_in == features.shape[1]
 
-        self.outnet = nn.Linear(self.n_in, self.n_out, self.bias)
+
+        if self.outnet is None:
+            self.outnet = nn.Linear(self.n_in, self.n_out, self.bias)
 
         # predict atomwise contributions
         y = self.outnet(features)
