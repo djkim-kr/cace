@@ -266,6 +266,7 @@ class Atomwise_linear(nn.Module):
 
         if self.outnet is None:
             self.outnet = nn.Linear(self.n_in, self.n_out, self.bias)
+            self.outnet = self.outnet.to(features.device)
 
         # predict atomwise contributions
         y = self.outnet(features)
