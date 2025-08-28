@@ -6,6 +6,7 @@ import torch.nn as nn
 from ..modules import Transform
 from ..modules import Preprocess
 from ..tools import torch_geometric
+from ..modules import Forces
 
 __all__ = ["AtomisticModel", "NeuralNetworkPotential"]
 
@@ -167,10 +168,20 @@ class NeuralNetworkPotential(AtomisticModel):
         if self.representation is not None:
             data = self.representation(data)
 
-        for m in self.output_modules:
-            if hasattr(self, "keep_graph"):
-                training = training or self.keep_graph
-            data = m(data, training=training, output_index=output_index)
+        if len([m for m in self.output_modules if isinstance(m, Forces)]) > 1:
+            first_forces_idx = -1
+            for i, m in enumerate(self.output_modules):
+                if isinstance(m, Forces):
+                    first_forces_idx = i
+                    break
+
+        for i, m in enumerate(self.output_modules):
+            # print(training)
+            training_m = training
+            if i == first_forces_idx and hasattr(self, "keep_graph"):
+                training_m = training or self.keep_graph
+            data = m(data, training=training_m, output_index=output_index)
+            # print(m.__class__.__name__, training_m)
 
         # apply postprocessing (if enabled)
         data = self.postprocess(data)
