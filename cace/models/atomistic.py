@@ -168,8 +168,8 @@ class NeuralNetworkPotential(AtomisticModel):
         if self.representation is not None:
             data = self.representation(data)
 
+        first_forces_idx = -1
         if len([m for m in self.output_modules if isinstance(m, Forces)]) > 1:
-            first_forces_idx = -1
             for i, m in enumerate(self.output_modules):
                 if isinstance(m, Forces):
                     first_forces_idx = i
