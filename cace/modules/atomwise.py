@@ -36,6 +36,7 @@ class Atomwise(nn.Module):
         energy_output_index: Optional[int] = None,  # for multi-head output
         charge_output_index: Optional[int] = None,  # for multi-head output
         charge_state: Optional[float] = None, # global charge state embedding
+        atomic_charge_embedding: Optional[dict] = None, # atomic charge state embedding
     ):
         """
         Args:
@@ -94,6 +95,7 @@ class Atomwise(nn.Module):
             self.energy_output_index = None
             self.charge_output_index = None
         self.charge_state = charge_state
+        self.atomic_charge_embedding = atomic_charge_embedding
 
         if n_in is not None:
             self.outnet = build_mlp(
@@ -123,7 +125,8 @@ class Atomwise(nn.Module):
                 training: bool = None,
                 output_index: int = None, # only used for multi-head output
                ) -> Dict[str, torch.Tensor]:
-
+        # for i in data.keys():
+        #     print(i)
         # check if self.feature_key exists, otherwise set default 
         if not hasattr(self, "feature_key") or self.feature_key is None: 
             self.feature_key = "node_feats"
@@ -141,8 +144,16 @@ class Atomwise(nn.Module):
             # print(features.shape)
             # print(charge_state.shape)
             features = torch.cat([features, charge_state], dim=-1)
+        if self.atomic_charge_embedding is not None and 'atomic_numbers' in data:
+            if isinstance(self.atomic_charge_embedding, dict):
+                atomic_numbers = data['atomic_numbers'].cpu().numpy()
+                if not all(isinstance(key, int) for key in self.atomic_charge_embedding.keys()):
+                    raise ValueError("Keys of atomic_charge_embedding dictionary must be integers.")
+                charge_values = [self.atomic_charge_embedding.get(int(num), 0) for num in atomic_numbers]
+                charge_state = torch.tensor(charge_values, device=features.device, dtype=features.dtype).unsqueeze(-1)
+            features = torch.cat([features, charge_state], dim=-1)
+        # print(features[:, -1])
         # print(features.shape)
-        # print(features[:5,:])
 
         if self.n_in is None:
             self.n_in = features.shape[1]
