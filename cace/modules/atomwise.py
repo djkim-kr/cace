@@ -31,6 +31,7 @@ class Atomwise(nn.Module):
         residual: bool = False,
         use_batchnorm: bool = False,
         add_linear_nn: bool = False,
+        global_charge_state: Optional[float] = None, # global charge state embedding
         post_process: Optional[Callable] = None
     ):
         """
@@ -80,6 +81,7 @@ class Atomwise(nn.Module):
         self.post_process = post_process
         self.bias = bias
         self.feature_key = feature_key
+        self.global_charge_state = global_charge_state
 
         if n_in is not None:
             self.outnet = build_mlp(
@@ -122,6 +124,13 @@ class Atomwise(nn.Module):
             features = features.reshape(features.shape[0], -1)
         elif isinstance(self.feature_key, list):
             features = torch.cat([data[key].reshape(data[key].shape[0], -1) for key in self.feature_key], dim=-1)
+        
+        if self.global_charge_state is not None:
+            assert isinstance(self.global_charge_state, float), "global_charge_state must be a float value."
+            global_charge_state = torch.full((features.shape[0], 1), self.global_charge_state, 
+                                             device=features.device, dtype=features.dtype)
+            features = torch.cat([features, global_charge_state], dim=-1)
+
 
         if self.n_in is None:
             self.n_in = features.shape[1]
