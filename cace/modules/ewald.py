@@ -401,10 +401,14 @@ class EwaldPotential(nn.Module):
 
         # Compute structure factor S(k), Σq*e^(ikr)
         k_dot_r = torch.matmul(r_raw, kvec.T)  # [n, M]
-        exp_ikr = torch.exp(1j * k_dot_r)
         if q.dim() == 1:       
             q = q.unsqueeze(1)   
-        S_k = (q.unsqueeze(2) * exp_ikr.unsqueeze(1)).sum(dim=0) #[n_q, M]
+
+        cos_k_dot_r = torch.cos(k_dot_r)
+        sin_k_dot_r = torch.sin(k_dot_r)
+        S_k_real = (q.unsqueeze(2) * cos_k_dot_r.unsqueeze(1)).sum(dim=0)
+        S_k_imag = (q.unsqueeze(2) * sin_k_dot_r.unsqueeze(1)).sum(dim=0)
+        S_k_sq = S_k_real**2 + S_k_imag**2  # [M]
 
         # Compute kfac,  exp(-σ^2/2 k^2) / k^2 for exponent = 1
         if self.exponent == 1:
@@ -419,19 +423,22 @@ class EwaldPotential(nn.Module):
         
         # Compute potential, (2π/volume)* sum(factors * kfac * |S(k)|^2)
         volume = torch.det(cell_now)
-        pot = (factors * kfac * torch.abs(S_k)**2).sum(dim=1) / volume   # [n_q]
+        pot = (factors * kfac * S_k_sq).sum(dim=1) / volume   # [n_q]
         
         # Compute electric field if needed
         q_field = torch.zeros_like(q, dtype=r_raw.dtype, device=device)
         if compute_field:
-            sk_field = 2 * kfac * torch.conj(S_k)                               # [n_q, M]
-            q_field = (factors * torch.real(exp_ikr.unsqueeze(1)                # [N,1,M]
-                                            * sk_field.unsqueeze(0)))           # [1,n_q,M]
+            # Re(exp(ikr) * S_k*) = cos(kr)*S_real + sin(kr)*S_imag
+            real_term = (cos_k_dot_r.unsqueeze(1) * S_k_real.unsqueeze(0) + 
+                         sin_k_dot_r.unsqueeze(1) * S_k_imag.unsqueeze(0)) # [N, n_q, M]
+            q_field = factors * 2* kfac * real_term
             q_field = q_field.sum(dim=2) / volume                               # [N,n_q]
 
         # Remove self-interaction if applicable
         if self.remove_self_interaction and self.exponent == 1:
             pot -= torch.sum(q**2) / (self.sigma * (2*torch.pi)**1.5)
             q_field -= q * (2 / (self.sigma * (2 * torch.pi)**1.5))         # [N,n_q]
+
+        print(pot, q_field[:5]) # Debugging output
 
         return pot * self.norm_factor, q_field * self.norm_factor
