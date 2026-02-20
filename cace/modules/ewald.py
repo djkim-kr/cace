@@ -439,6 +439,4 @@ class EwaldPotential(nn.Module):
             pot -= torch.sum(q**2) / (self.sigma * (2*torch.pi)**1.5)
             q_field -= q * (2 / (self.sigma * (2 * torch.pi)**1.5))         # [N,n_q]
 
-        print(pot, q_field[:5]) # Debugging output
-
         return pot * self.norm_factor, q_field * self.norm_factor
