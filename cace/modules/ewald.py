@@ -383,24 +383,43 @@ class EwaldPotential(nn.Module):
         kvec = (nvec.float() @ G).to(device)  # [N_total, 3]
 
         # Apply k-space cutoff and filter
-        k_sq = torch.sum(kvec ** 2, dim=1)
-        mask = (k_sq > 0) & (k_sq <= self.k_sq_max)
-        kvec = kvec[mask] # [M, 3]
-        k_sq = k_sq[mask] # [M]
-        nvec = nvec[mask] # [M, 3]
+        k_sq = torch.sum(kvec ** 2, dim=1) # [N_total]
+        valid_k_cut = (k_sq > 0) & (k_sq <= self.k_sq_max)
+        # kvec = kvec[mask] # [M, 3]
+        # k_sq = k_sq[mask] # [M]
+        # nvec = nvec[mask] # [M, 3]
 
         # Determine symmetry factors (handle hemisphere to avoid double-counting)
         # Include nvec if first non-zero component is positive
         non_zero = (nvec != 0).to(torch.int)
         first_non_zero = torch.argmax(non_zero, dim=1)
         sign = torch.gather(nvec, 1, first_non_zero.unsqueeze(1)).squeeze()
-        hemisphere_mask = (sign > 0) | ((nvec == 0).all(dim=1))
-        kvec = kvec[hemisphere_mask]
-        k_sq = k_sq[hemisphere_mask]
-        factors = torch.where((nvec[hemisphere_mask] == 0).all(dim=1), 1.0, 2.0)
+        is_zero = (nvec == 0).all(dim=1)
+        hemisphere_mask = (sign > 0) | is_zero # [N_total]
+        # kvec = kvec[hemisphere_mask]
+        # k_sq = k_sq[hemisphere_mask]
+        valid_mask = valid_k_cut & hemisphere_mask # [N_total]
+        # factors = torch.where((nvec[hemisphere_mask] == 0).all(dim=1), 1.0, 2.0) # [M]
+        factors = torch.where(is_zero, 1.0, 2.0) # [N_total]
+        k_sq_safe = torch.clamp(k_sq, min=1e-12) # Avoid division by zero at k_sq=0
+
+        # Compute kfac,  exp(-σ^2/2 k^2) / k^2 for exponent = 1
+        if self.exponent == 1:
+            kfac = torch.exp(-self.sigma_sq_half * k_sq_safe) / k_sq_safe
+        elif self.exponent == 6:
+            b_sq = k_sq_safe * self.sigma_sq_half
+            b = torch.sqrt(b_sq)
+            kfac = -1.0 * k_sq_safe**(3/2) * (
+                torch.sqrt(torch.tensor(torch.pi)) * torch.special.erfc(b) + 
+                (1/(2*b**3) - 1/b) * torch.exp(-b_sq)
+            )
+        else:
+            raise ValueError("Unsupported exponent value. Only 1 and 6 are supported.")
+        
+        kfac = kfac * valid_mask.to(kfac.dtype)  # Zero out invalid k values [N_total]
 
         # Compute structure factor S(k), Σq*e^(ikr)
-        k_dot_r = torch.matmul(r_raw, kvec.T)  # [n, M]
+        k_dot_r = torch.matmul(r_raw, kvec.T)  # [n, N_total]
         if q.dim() == 1:       
             q = q.unsqueeze(1)   
 
@@ -408,18 +427,9 @@ class EwaldPotential(nn.Module):
         sin_k_dot_r = torch.sin(k_dot_r)
         S_k_real = (q.unsqueeze(2) * cos_k_dot_r.unsqueeze(1)).sum(dim=0)
         S_k_imag = (q.unsqueeze(2) * sin_k_dot_r.unsqueeze(1)).sum(dim=0)
-        S_k_sq = S_k_real**2 + S_k_imag**2  # [M]
+        S_k_sq = S_k_real**2 + S_k_imag**2  # [N_total]
 
-        # Compute kfac,  exp(-σ^2/2 k^2) / k^2 for exponent = 1
-        if self.exponent == 1:
-            kfac = torch.exp(-self.sigma_sq_half * k_sq) / k_sq
-        elif self.exponent == 6:
-            b_sq = k_sq * self.sigma_sq_half
-            b = torch.sqrt(b_sq)
-            kfac = -1.0 * k_sq**(3/2) * (
-                torch.sqrt(torch.tensor(torch.pi)) * torch.special.erfc(b) + 
-                (1/(2*b**3) - 1/b) * torch.exp(-b_sq)
-            )
+
         
         # Compute potential, (2π/volume)* sum(factors * kfac * |S(k)|^2)
         volume = torch.det(cell_now)
