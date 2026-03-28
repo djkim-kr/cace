@@ -47,7 +47,7 @@ class Cace(nn.Module):
         device: torch.device = torch.device("cpu"),
         timeit: bool = False,
         keep_node_features_A: bool = False, # leave it here to be backward compatible
-        max_l_out: int = None,
+        max_l_out: int = 0,
         forward_features: List[str] = [],
         charge_spin_key: Optional[str] = None,
     ):
@@ -133,7 +133,7 @@ class Cace(nn.Module):
 
         self.l_list = self.angular_basis.get_lxlylz_list()
         self.symmetrizer = Symmetrizer(self.max_nu, self.max_l, self.l_list)
-        if max_l_out is not None and max_l_out > 0:
+        if max_l_out > 0:
             self.symmetrizer_a = Symmetrizer_A(self.max_nu, self.max_l, self.max_l_out, self.l_list)
         # the JIT version seems to be slower
         #symmetrizer = Symmetrizer_JIT(self.max_nu, self.max_l, self.l_list)

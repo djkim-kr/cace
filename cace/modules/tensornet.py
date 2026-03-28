@@ -1,6 +1,5 @@
 import torch
 import torch.nn as nn
-import lightning as L
 from typing import Optional, Dict, List, Callable, Tuple, Union
 
 from .tensornet_utils import multi_outer_product

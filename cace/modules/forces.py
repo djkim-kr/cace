@@ -3,6 +3,7 @@ import torch
 from torch import nn
 
 from .utils import get_outputs
+from .tensornet import TensorFeedForward
 
 __all__ = ['Forces', 'DirectForces']
 
@@ -72,7 +73,6 @@ class Forces(nn.Module):
             f"{self.__class__.__name__} (calc_forces={self.calc_forces}, calc_stress={self.calc_stress},) "
             )
 
-from cace.modules.tensornet import TensorFeedForward
 
 class DirectForces(nn.Module):
     """
