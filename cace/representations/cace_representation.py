@@ -1,4 +1,3 @@
-from cace.modules.symmetrize_basis import Symmetrizer, Symmetrizer_A
 import torch
 from torch import nn
 from typing import Callable, Dict, Sequence, Optional, List, Any
@@ -13,6 +12,7 @@ from ..modules import (
     AngularComponent_GPU,
     SharedRadialLinearTransform,
     Symmetrizer,
+    Symmetrizer_A,
     #Symmetrizer_JIT,
     MessageAr, 
     MessageBchi,
@@ -34,7 +34,6 @@ class Cace(nn.Module):
         radial_basis: nn.Module,
         cutoff_fn: Callable,
         max_l: int,
-        max_l_out: int,
         max_nu: int,
         num_message_passing: int,
         node_encoder: Optional[nn.Module] = None,
@@ -47,7 +46,8 @@ class Cace(nn.Module):
         avg_num_neighbors: float = 10.0,
         device: torch.device = torch.device("cpu"),
         timeit: bool = False,
-        # keep_node_features_A: bool = False,
+        keep_node_features_A: bool = False, # leave it here to be backward compatible
+        max_l_out: int = None,
         forward_features: List[str] = [],
         charge_spin_key: Optional[str] = None,
     ):
@@ -133,7 +133,7 @@ class Cace(nn.Module):
 
         self.l_list = self.angular_basis.get_lxlylz_list()
         self.symmetrizer = Symmetrizer(self.max_nu, self.max_l, self.l_list)
-        if max_l_out > 0:
+        if max_l_out is not None and max_l_out > 0:
             self.symmetrizer_a = Symmetrizer_A(self.max_nu, self.max_l, self.max_l_out, self.l_list)
         # the JIT version seems to be slower
         #symmetrizer = Symmetrizer_JIT(self.max_nu, self.max_l, self.l_list)
@@ -283,7 +283,7 @@ class Cace(nn.Module):
      
         node_feats_out = torch.stack(node_feats_list, dim=-1)
 
-        if self.keep_node_features_A: #max_l_out > 0
+        if self.keep_node_features_A:
             node_feats_A_out = torch.stack(node_feats_A_list, dim=-1)
             l_feats_out = self.symmetrizer_a(node_feats_A_out)
             l_feats_out[0] = node_feats_out.reshape(node_feats_out.shape[0],-1)
