@@ -19,6 +19,8 @@ class TensorReadout(nn.Module):
         l1_key: str = 'vector',
         l2_key: str = 'quadrupole',
         n_channel: int = 1,
+        l1_output_scale: float = 1.0,
+        l2_output_scale: float = 1.0,
     ):
         """
         Args:        
@@ -31,6 +33,9 @@ class TensorReadout(nn.Module):
         self.l0_key = l0_key
         self.l1_key = l1_key
         self.l2_key = l2_key
+
+        self.l1_output_scale = l1_output_scale
+        self.l2_output_scale = l2_output_scale
 
         self.model_outputs = []
         self.model_outputs.append(self.l1_key)
@@ -51,9 +56,9 @@ class TensorReadout(nn.Module):
             assert 2 in features, f"Features for l=2 not found in data dictionary under key {self.feature_key}."
 
         out = self.tensor_feed_forward(features)
-        data[self.l1_key] = out[1][:,0]
+        data[self.l1_key] = out[1][:,0] * self.l1_output_scale
         if self.max_l >= 2:
-            data[self.l2_key] = out[2][:,0]
+            data[self.l2_key] = out[2][:,0] * self.l2_output_scale
 
         return data 
 
