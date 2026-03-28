@@ -11,7 +11,7 @@ class LesWrapper(nn.Module):
     so it is not necessary to use this wrapper in CACE.
     """
     def __init__(self,
-                 feature_key: Union[str, Sequence[int]] = None, #'node_feats'
+                 feature_key: Union[str, Sequence[int]] = 'node_feats',
                  energy_key: str = 'LES_energy',
                  charge_key: str = 'LES_charge',
                  dipole_key: str = None,
@@ -21,10 +21,10 @@ class LesWrapper(nn.Module):
                  compute_energy: bool = True,
                  compute_bec: bool = False,
                  bec_output_index: int = None, # option to compute BEC along one axis
-                 use_les_atomwise: bool = False
                  ):
         super().__init__()
         from les import Les
+        use_les_atomwise = True
         if feature_key is None:
             # directly provide the charges to LES
             use_les_atomwise = False
