@@ -87,7 +87,11 @@ class LesWrapper(nn.Module):
             bec_output_index=self.bec_output_index,
         )
 
+        # update the data dictionary with the results
         data[self.charge_key] = result['latent_charges']
+        if self.dipole_key is not None:
+            data[self.dipole_key] = result['latent_dipoles']
+
         if self.compute_energy:
             data[self.energy_key] = result['E_lr']
         if self.compute_bec:
