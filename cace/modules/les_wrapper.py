@@ -61,9 +61,9 @@ class LesWrapper(nn.Module):
 
     def forward(self, data: Dict[str, torch.Tensor], **kwargs) -> Dict[str, torch.Tensor]:
 
-        if self.feature_key is None:
+        # if charge key is already in data, we use the provided charges and skip the LES charge prediction
+        if self.charge_key in data:
             features = None
-            assert self.charge_key in data, f"Charge key {self.charge_key} must be provided in data dictionary when feature_key is None."
         # reshape the feature vectors
         elif isinstance(self.feature_key, str):
             if self.feature_key not in data:
