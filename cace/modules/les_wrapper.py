@@ -52,9 +52,13 @@ class LesWrapper(nn.Module):
 
     def set_compute_energy(self, compute_energy: bool):
         self.compute_energy = compute_energy
+        if compute_energy and self.energy_key not in self.model_outputs:
+            self.model_outputs.append(self.energy_key)
 
     def set_compute_bec(self, compute_bec: bool):
         self.compute_bec = compute_bec
+        if compute_bec and self.bec_key not in self.model_outputs:
+            self.model_outputs.append(self.bec_key)
 
     def set_bec_output_index(self, bec_output_index: int):
         self.bec_output_index = bec_output_index
@@ -96,4 +100,5 @@ class LesWrapper(nn.Module):
             data[self.energy_key] = result['E_lr']
         if self.compute_bec:
             data[self.bec_key] = result['BEC']
+            #print(data[self.bec_key])
         return data

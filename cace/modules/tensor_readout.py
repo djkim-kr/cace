@@ -40,6 +40,7 @@ class TensorReadout(nn.Module):
         self.l2_output_scale = l2_output_scale
 
         self.model_outputs = []
+        self.model_outputs.append(self.l0_key)
         self.model_outputs.append(self.l1_key)
         if max_l >= 2:
             self.model_outputs.append(self.l2_key)
