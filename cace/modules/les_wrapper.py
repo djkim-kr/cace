@@ -21,6 +21,8 @@ class LesWrapper(nn.Module):
                  compute_energy: bool = True,
                  compute_bec: bool = False,
                  bec_output_index: int = None, # option to compute BEC along one axis
+                 make_alpha_positive: bool = False,
+                 make_kappa_positive: bool = False,
                  ):
         super().__init__()
         from les import Les
@@ -36,6 +38,9 @@ class LesWrapper(nn.Module):
         self.dipole_key = dipole_key
         self.kappa_key = kappa_key
         self.alpha_key = alpha_key
+
+        self.make_alpha_positive = make_alpha_positive
+        self.make_kappa_positive = make_kappa_positive
 
         self.bec_key = bec_key
         self.bec_output_index = bec_output_index
@@ -76,6 +81,15 @@ class LesWrapper(nn.Module):
             features = features.reshape(features.shape[0], -1)
         elif isinstance(self.feature_key, list):
             features = torch.cat([data[key].reshape(data[key].shape[0], -1) for key in self.feature_key], dim=-1)
+
+        if hasattr(self, 'make_alpha_positive') and self.make_alpha_positive:
+            alpha = data[self.alpha_key] if self.alpha_key in data else None
+            if alpha.dim() == 2:
+                data[self.alpha_key] = alpha**2
+            if alpha.dim() == 3 and alpha.shape[1] == 3 and alpha.shape[2] == 3:
+                data[self.alpha_key] = torch.einsum("nij,nkj->nik",alpha, alpha)
+        if hasattr(self, 'make_kappa_positive') and self.make_kappa_positive:
+            data[self.kappa_key] = data[self.kappa_key]**2
 
         result = self.les(
             desc=features,
