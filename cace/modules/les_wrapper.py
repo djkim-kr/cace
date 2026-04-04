@@ -25,6 +25,7 @@ class LesWrapper(nn.Module):
                  make_alpha_positive: bool = False,
                  make_kappa_positive: bool = False,
                  use_atomic_alpha: bool = False,
+                 use_epsilon_r_scaling: bool = False,
                  ):
         super().__init__()
         from les import Les
@@ -32,7 +33,10 @@ class LesWrapper(nn.Module):
         if feature_key is None:
             # directly provide the charges to LES
             use_les_atomwise = False
-        self.les = Les(les_arguments={"use_atomwise": use_les_atomwise, "use_atomic_alpha": use_atomic_alpha})
+        self.les = Les(les_arguments={"use_atomwise": use_les_atomwise, 
+                                      "use_atomic_alpha": use_atomic_alpha,
+                                      "use_epsilon_r_scaling": use_epsilon_r_scaling,
+                                      })
  
         self.feature_key = feature_key
         self.energy_key = energy_key
