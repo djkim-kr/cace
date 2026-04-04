@@ -17,12 +17,14 @@ class LesWrapper(nn.Module):
                  dipole_key: str = None,
                  kappa_key: str = None,
                  alpha_key: str = None,
+                 atomic_number_key: str = None,
                  bec_key: str = 'LES_BEC',
                  compute_energy: bool = True,
                  compute_bec: bool = False,
                  bec_output_index: int = None, # option to compute BEC along one axis
                  make_alpha_positive: bool = False,
                  make_kappa_positive: bool = False,
+                 use_atomic_alpha: bool = False,
                  ):
         super().__init__()
         from les import Les
@@ -30,7 +32,7 @@ class LesWrapper(nn.Module):
         if feature_key is None:
             # directly provide the charges to LES
             use_les_atomwise = False
-        self.les = Les(les_arguments={"use_atomwise": use_les_atomwise})
+        self.les = Les(les_arguments={"use_atomwise": use_les_atomwise, "use_atomic_alpha": use_atomic_alpha})
  
         self.feature_key = feature_key
         self.energy_key = energy_key
@@ -38,6 +40,7 @@ class LesWrapper(nn.Module):
         self.dipole_key = dipole_key
         self.kappa_key = kappa_key
         self.alpha_key = alpha_key
+        self.atomic_number_key = atomic_number_key
 
         self.make_alpha_positive = make_alpha_positive
         self.make_kappa_positive = make_kappa_positive
@@ -97,6 +100,7 @@ class LesWrapper(nn.Module):
             latent_dipoles=data[self.dipole_key] if self.dipole_key is not None else None,
             latent_alphas=data[self.alpha_key] if self.alpha_key is not None else None,
             latent_kappas=data[self.kappa_key] if self.kappa_key is not None else None,
+            atomic_numbers=data[self.atomic_number_key] if self.atomic_number_key is not None else None,
             positions=data['positions'],
             cell=data['cell'].view(-1, 3, 3),
             batch=data["batch"],
@@ -114,5 +118,4 @@ class LesWrapper(nn.Module):
             data[self.energy_key] = result['E_lr']
         if self.compute_bec:
             data[self.bec_key] = result['BEC']
-            #print(data[self.bec_key])
         return data
