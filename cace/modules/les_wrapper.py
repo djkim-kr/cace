@@ -105,7 +105,7 @@ class LesWrapper(nn.Module):
             alpha = data[self.alpha_key] if self.alpha_key in data else None
             if alpha.dim() == 3 and alpha.shape[1] == 3 and alpha.shape[2] == 3:
                 desc = data[self.feature_key]
-                a2 = self.atomwise(desc.reshape(desc.shape[0],-1),data["batch"]).squeeze()
+                a2 = self.alpha_atomwise(desc.reshape(desc.shape[0],-1), data["batch"]).squeeze()
                 eye = torch.eye(3,device=a2.device)
                 a2 = a2[:,None,None] * eye[None,:,:]
                 data[self.alpha_key] = data[self.alpha_key] + a2
