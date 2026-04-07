@@ -24,6 +24,7 @@ class LesWrapper(nn.Module):
                  bec_output_index: int = None, # option to compute BEC along one axis
                  make_alpha_positive: bool = False,
                  make_kappa_positive: bool = False,
+                 add_scalar_alpha: bool = False,
                  use_atomic_alpha: bool = False,
                  use_epsilon_r_scaling: bool = False,
                  ):
@@ -48,6 +49,17 @@ class LesWrapper(nn.Module):
 
         self.make_alpha_positive = make_alpha_positive
         self.make_kappa_positive = make_kappa_positive
+        self.add_scalar_alpha = add_scalar_alpha
+        if self.add_scalar_alpha:
+            from les.module import Atomwise
+            self.atomwise: nn.Module = (
+                Atomwise(
+                    n_layers=3,
+                    n_hidden=[32,16],
+                    add_linear_nn=True,
+                    output_scaling_factor=1, 
+                )
+            )
 
         self.bec_key = bec_key
         self.bec_output_index = bec_output_index
@@ -88,6 +100,15 @@ class LesWrapper(nn.Module):
             features = features.reshape(features.shape[0], -1)
         elif isinstance(self.feature_key, list):
             features = torch.cat([data[key].reshape(data[key].shape[0], -1) for key in self.feature_key], dim=-1)
+
+        if hasattr(self, 'add_scalar_alpha') and self.add_scalar_alpha:
+            alpha = data[self.alpha_key] if self.alpha_key in data else None
+            if alpha.dim() == 3 and alpha.shape[1] == 3 and alpha.shape[2] == 3:
+                desc = data[self.feature_key]
+                a2 = self.atomwise(desc.reshape(desc.shape[0],-1),data["batch"]).squeeze()
+                eye = torch.eye(3,device=a2.device)
+                a2 = a2[:,None,None] * eye[None,:,:]
+                data[self.alpha_key] = data[self.alpha_key] + a2
 
         if hasattr(self, 'make_alpha_positive') and self.make_alpha_positive:
             alpha = data[self.alpha_key] if self.alpha_key in data else None
