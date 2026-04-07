@@ -25,6 +25,7 @@ class LesWrapper(nn.Module):
                  make_alpha_positive: bool = False,
                  make_kappa_positive: bool = False,
                  add_scalar_alpha: bool = False,
+                 scaling_factor_scalar_alpha: float = 0.001,
                  use_atomic_alpha: bool = False,
                  use_epsilon_r_scaling: bool = False,
                  ):
@@ -50,15 +51,14 @@ class LesWrapper(nn.Module):
         self.make_alpha_positive = make_alpha_positive
         self.make_kappa_positive = make_kappa_positive
         self.add_scalar_alpha = add_scalar_alpha
+        self.scaling_factor_scalar_alpha = scaling_factor_scalar_alpha
         if self.add_scalar_alpha:
-            from les.module import Atomwise
-            self.alpha_atomwise: nn.Module = (
-                Atomwise(
-                    n_layers=3,
-                    n_hidden=[32,16],
-                    add_linear_nn=True,
-                    output_scaling_factor=1, 
-                )
+            self.alpha_scalar_mlp = nn.Sequential(
+                nn.LazyLinear(32, bias=True),
+                nn.SiLU(),
+                nn.Linear(32, 16, bias=True),
+                nn.SiLU(),
+                nn.Linear(16, 1, bias=True)
             )
 
         self.bec_key = bec_key
@@ -105,7 +105,7 @@ class LesWrapper(nn.Module):
             alpha = data[self.alpha_key] if self.alpha_key in data else None
             if alpha.dim() == 3 and alpha.shape[1] == 3 and alpha.shape[2] == 3:
                 desc = data[self.feature_key]
-                a2 = self.alpha_atomwise(desc.reshape(desc.shape[0],-1), data["batch"]).squeeze()
+                a2 = self.alpha_scalar_mlp(desc.reshape(desc.shape[0],-1)).squeeze() * self.scaling_factor_scalar_alpha
                 eye = torch.eye(3,device=a2.device)
                 a2 = a2[:,None,None] * eye[None,:,:]
                 data[self.alpha_key] = data[self.alpha_key] + a2
