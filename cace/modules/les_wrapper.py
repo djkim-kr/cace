@@ -104,7 +104,7 @@ class LesWrapper(nn.Module):
             latent_dipoles=data[self.dipole_key] if self.dipole_key is not None else None,
             latent_alphas=data[self.alpha_key] if self.alpha_key is not None else None,
             latent_kappas=data[self.kappa_key] if self.kappa_key is not None else None,
-            atomic_numbers=data[self.atomic_number_key] if self.atomic_number_key is not None else None,
+            atomic_numbers=data[self.atomic_number_key] if hasattr(self, 'atomic_number_key') and  self.atomic_number_key is not None else None,
             positions=data['positions'],
             cell=data['cell'].view(-1, 3, 3),
             batch=data["batch"],
@@ -117,6 +117,8 @@ class LesWrapper(nn.Module):
         data[self.charge_key] = result['latent_charges']
         if self.dipole_key is not None:
             data[self.dipole_key] = result['latent_dipoles']
+        if self.alpha_key is not None:
+            data[self.alpha_key] = result['latent_alphas']
 
         if self.compute_energy:
             data[self.energy_key] = result['E_lr']
