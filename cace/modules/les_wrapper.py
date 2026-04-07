@@ -52,7 +52,7 @@ class LesWrapper(nn.Module):
         self.add_scalar_alpha = add_scalar_alpha
         if self.add_scalar_alpha:
             from les.module import Atomwise
-            self.atomwise: nn.Module = (
+            self.alpha_atomwise: nn.Module = (
                 Atomwise(
                     n_layers=3,
                     n_hidden=[32,16],
