@@ -54,9 +54,7 @@ class LesWrapper(nn.Module):
         self.scaling_factor_scalar_alpha = scaling_factor_scalar_alpha
         if self.add_scalar_alpha:
             self.alpha_scalar_mlp = nn.Sequential(
-                nn.LazyLinear(32, bias=True),
-                nn.SiLU(),
-                nn.Linear(32, 16, bias=True),
+                nn.LazyLinear(16, bias=True),
                 nn.SiLU(),
                 nn.Linear(16, 1, bias=True)
             )
