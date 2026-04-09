@@ -25,6 +25,7 @@ class LesWrapper(nn.Module):
                  make_alpha_positive: bool = False,
                  make_kappa_positive: bool = False,
                  add_scalar_alpha: bool = False,
+                 scalar_alpha_mlp_sizes: Sequence[int] = [32, 16],
                  scaling_factor_scalar_alpha: float = 0.001,
                  use_atomic_alpha: bool = False,
                  use_epsilon_r_scaling: bool = False,
@@ -53,11 +54,8 @@ class LesWrapper(nn.Module):
         self.add_scalar_alpha = add_scalar_alpha
         self.scaling_factor_scalar_alpha = scaling_factor_scalar_alpha
         if self.add_scalar_alpha:
-            self.alpha_scalar_mlp = nn.Sequential(
-                nn.LazyLinear(16, bias=True),
-                nn.SiLU(),
-                nn.Linear(16, 1, bias=True)
-            )
+            self.alpha_scalar_mlp = build_mlp(hidden_sizes=scalar_alpha_mlp_sizes)
+            #print(self.alpha_scalar_mlp)
 
         self.bec_key = bec_key
         self.bec_output_index = bec_output_index
@@ -144,3 +142,20 @@ class LesWrapper(nn.Module):
         if self.compute_bec:
             data[self.bec_key] = result['BEC']
         return data
+
+def build_mlp(hidden_sizes, out_dim=1, activation=nn.SiLU, bias=True):
+    layers = []
+    
+    # first layer: Lazy (infers input dim)
+    layers.append(nn.LazyLinear(hidden_sizes[0], bias=bias))
+    layers.append(activation())
+    
+    # hidden layers
+    for in_dim, out_dim_hidden in zip(hidden_sizes[:-1], hidden_sizes[1:]):
+        layers.append(nn.Linear(in_dim, out_dim_hidden, bias=bias))
+        layers.append(activation())
+    
+    # output layer
+    layers.append(nn.Linear(hidden_sizes[-1], out_dim, bias=bias))
+    
+    return nn.Sequential(*layers)
