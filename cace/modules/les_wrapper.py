@@ -25,6 +25,8 @@ class LesWrapper(nn.Module):
                  make_alpha_positive: bool = False,
                  make_kappa_positive: bool = False,
                  add_scalar_alpha: bool = False,
+                 scalar_alpha_mlp_sizes: Sequence[int] = [32, 16],
+                 scaling_factor_scalar_alpha: float = 0.001,
                  use_atomic_alpha: bool = False,
                  use_epsilon_r_scaling: bool = False,
                  ):
@@ -50,14 +52,9 @@ class LesWrapper(nn.Module):
         self.make_alpha_positive = make_alpha_positive
         self.make_kappa_positive = make_kappa_positive
         self.add_scalar_alpha = add_scalar_alpha
+        self.scaling_factor_scalar_alpha = scaling_factor_scalar_alpha
         if self.add_scalar_alpha:
-            self.alpha_scalar_mlp = nn.Sequential(
-                nn.LazyLinear(32, bias=True),
-                nn.SiLU(),
-                nn.Linear(32, 16, bias=True),
-                nn.SiLU(),
-                nn.Linear(16, 1, bias=True)
-            )
+            self.alpha_scalar_mlp = build_mlp(hidden_sizes=scalar_alpha_mlp_sizes)
 
         self.bec_key = bec_key
         self.bec_output_index = bec_output_index
@@ -103,7 +100,7 @@ class LesWrapper(nn.Module):
             alpha = data[self.alpha_key] if self.alpha_key in data else None
             if alpha.dim() == 3 and alpha.shape[1] == 3 and alpha.shape[2] == 3:
                 desc = data[self.feature_key]
-                a2 = self.alpha_scalar_mlp(desc.reshape(desc.shape[0],-1)).squeeze()
+                a2 = self.alpha_scalar_mlp(desc.reshape(desc.shape[0],-1)).squeeze() * self.scaling_factor_scalar_alpha
                 eye = torch.eye(3,device=a2.device)
                 a2 = a2[:,None,None] * eye[None,:,:]
                 data[self.alpha_key] = data[self.alpha_key] + a2
@@ -123,7 +120,7 @@ class LesWrapper(nn.Module):
             latent_dipoles=data[self.dipole_key] if self.dipole_key is not None else None,
             latent_alphas=data[self.alpha_key] if self.alpha_key is not None else None,
             latent_kappas=data[self.kappa_key] if self.kappa_key is not None else None,
-            atomic_numbers=data[self.atomic_number_key] if self.atomic_number_key is not None else None,
+            atomic_numbers=data[self.atomic_number_key] if hasattr(self, 'atomic_number_key') and  self.atomic_number_key is not None else None,
             positions=data['positions'],
             cell=data['cell'].view(-1, 3, 3),
             batch=data["batch"],
@@ -136,9 +133,28 @@ class LesWrapper(nn.Module):
         data[self.charge_key] = result['latent_charges']
         if self.dipole_key is not None:
             data[self.dipole_key] = result['latent_dipoles']
+        if self.alpha_key is not None:
+            data[self.alpha_key] = result['latent_alphas']
 
         if self.compute_energy:
             data[self.energy_key] = result['E_lr']
         if self.compute_bec:
             data[self.bec_key] = result['BEC']
         return data
+
+def build_mlp(hidden_sizes, out_dim=1, activation=nn.SiLU, bias=True):
+    layers = []
+    
+    # first layer: Lazy (infers input dim)
+    layers.append(nn.LazyLinear(hidden_sizes[0], bias=bias))
+    layers.append(activation())
+    
+    # hidden layers
+    for in_dim, out_dim_hidden in zip(hidden_sizes[:-1], hidden_sizes[1:]):
+        layers.append(nn.Linear(in_dim, out_dim_hidden, bias=bias))
+        layers.append(activation())
+    
+    # output layer
+    layers.append(nn.Linear(hidden_sizes[-1], out_dim, bias=bias))
+    
+    return nn.Sequential(*layers)
