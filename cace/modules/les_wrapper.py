@@ -114,6 +114,11 @@ class LesWrapper(nn.Module):
         if hasattr(self, 'make_kappa_positive') and self.make_kappa_positive:
             data[self.kappa_key] = data[self.kappa_key]**2
 
+        if "external_field" in data.keys():
+            e_ext = data["external_field"]
+        else:
+            e_ext = torch.zeros_like(data["positions"][0])
+
         result = self.les(
             desc=features,
             latent_charges=data[self.charge_key] if features is None else None,
@@ -124,6 +129,7 @@ class LesWrapper(nn.Module):
             positions=data['positions'],
             cell=data['cell'].view(-1, 3, 3),
             batch=data["batch"],
+            e_ext = e_ext,
             compute_energy=self.compute_energy,
             compute_bec=self.compute_bec,
             bec_output_index=self.bec_output_index,

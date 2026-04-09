@@ -135,11 +135,16 @@ class CACECalculator(Calculator):
 
         batch_base = next(iter(data_loader)).to(self.device)
         batch = batch_base.clone()
+        #Must add external_field with response properties
+        if self.external_field is not None:
+            batch["external_field"] = torch.tensor(self.external_field,device=batch["positions"].device,dtype=batch["positions"].dtype)
         output = self.model(batch.to_dict(), training=True, compute_stress=self.compute_stress, output_index=self.output_index)
         energy_output = to_numpy(output[self.energy_key])
         forces_output = to_numpy(output[self.forces_key])
         if self.external_field is not None and self.bec_key is not None:
             bec_output = to_numpy(output[self.bec_key])
+            if len(bec_output.shape) == 4:
+                bec_output = bec_output.sum(axis=1) #Sum over q and u becs
         # subtract atomic energies if available
         if self.atomic_energies:
             e0 = sum(self.atomic_energies.get(Z, 0) for Z in atoms.get_atomic_numbers())

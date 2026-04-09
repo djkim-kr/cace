@@ -294,6 +294,11 @@ class Cace(nn.Module):
             displacement = data["displacement"]
         except:
             displacement = None
+        
+        try:
+            external_field = data["external_field"]
+        except:
+            external_field = None
 
         output = {
             "positions": data["positions"],
@@ -302,6 +307,7 @@ class Cace(nn.Module):
             "batch": batch_now,
             "node_feats": node_feats_out,
             "node_feats_l": l_feats_out,
+            "external_field":external_field,
             }
 
         if hasattr(self, "forward_features") and len(self.forward_features) > 0:
