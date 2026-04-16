@@ -65,20 +65,21 @@ class TensorReadout(nn.Module):
         out = self.tensor_feed_forward(features)
         start, stop = 0, self.n_channel
         for k in self.l0_key:
-            data[k] = out[0][:, start:stop] * self.l0_output_scale
+            data[k] = (out[0][:, start:stop] * self.l0_output_scale).squeeze()
             start += self.n_channel
             stop += self.n_channel
         start, stop = 0, self.n_channel
         for k in self.l1_key:
-            data[k] = out[1][:, start:stop] * self.l1_output_scale
+            data[k] = (out[1][:, start:stop] * self.l1_output_scale).squeeze()
             start += self.n_channel
             stop += self.n_channel
         if self.max_l >= 2:
             start, stop = 0, self.n_channel
             for k in self.l2_key:
-                data[k] = out[2][:, start:stop] * self.l2_output_scale
+                data[k] = (out[2][:, start:stop] * self.l2_output_scale).squeeze()
                 start += self.n_channel
                 stop += self.n_channel
+           
        
         return data 
 
