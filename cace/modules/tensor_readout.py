@@ -15,9 +15,9 @@ class TensorReadout(nn.Module):
         self,
         max_l: int,
         feature_key: str = 'node_feats_l',
-        l0_key: str = 'scalar',
-        l1_key: str = 'vector',
-        l2_key: str = 'quadrupole',
+        l0_key: 'str | list[str]' = 'scalar',
+        l1_key: 'str | list[str]' = 'vector',
+        l2_key: 'str | list[str]' = 'quadrupole',
         n_channel: int = 1,
         l0_output_scale: float = 1.0,
         l1_output_scale: float = 1.0,
@@ -31,23 +31,27 @@ class TensorReadout(nn.Module):
         assert max_l <= 2, "max_l greater than 2 is not supported for direct prediction."
         self.max_l = max_l
         self.feature_key = feature_key
-        self.l0_key = l0_key
-        self.l1_key = l1_key
-        self.l2_key = l2_key
-
+        self.l0_key = [l0_key] if isinstance(l0_key, str) else l0_key
+        self.l1_key = [l1_key] if isinstance(l1_key, str) else l1_key
+        self.l2_key = [l2_key] if isinstance(l2_key, str) else l2_key
         self.l0_output_scale = l0_output_scale
         self.l1_output_scale = l1_output_scale
         self.l2_output_scale = l2_output_scale
 
         self.model_outputs = []
-        self.model_outputs.append(self.l0_key)
-        self.model_outputs.append(self.l1_key)
+        for key in self.l0_key:
+            self.model_outputs.append(key)
+        for key in self.l1_key:
+            self.model_outputs.append(key)
         if max_l >= 2:
-            self.model_outputs.append(self.l2_key)
+            for key in self.l2_key:
+                self.model_outputs.append(key)       
 
         self.required_derivatives = []
-
-        self.tensor_feed_forward = TensorFeedForward(n_channel, lomax=max_l)
+        nout = max(len(self.l0_key),len(self.l1_key),len(self.l2_key))
+        self.n_channel = n_channel
+        tff_dim = self.n_channel * nout
+        self.tensor_feed_forward = TensorFeedForward(tff_dim, lomax=max_l)
 
     def forward(self, data: Dict[str, torch.Tensor], **kwargs) -> Dict[str, torch.Tensor]:
         if self.feature_key not in data:
@@ -59,11 +63,24 @@ class TensorReadout(nn.Module):
             assert 2 in features, f"Features for l=2 not found in data dictionary under key {self.feature_key}."
 
         out = self.tensor_feed_forward(features)
-        data[self.l0_key] = out[0][:,0] * self.l0_output_scale
-        data[self.l1_key] = out[1][:,0] * self.l1_output_scale
+        start, stop = 0, self.n_channel
+        for k in self.l0_key:
+            data[k] = (out[0][:, start:stop] * self.l0_output_scale).squeeze()
+            start += self.n_channel
+            stop += self.n_channel
+        start, stop = 0, self.n_channel
+        for k in self.l1_key:
+            data[k] = (out[1][:, start:stop] * self.l1_output_scale).squeeze()
+            start += self.n_channel
+            stop += self.n_channel
         if self.max_l >= 2:
-            data[self.l2_key] = out[2][:,0] * self.l2_output_scale
-
+            start, stop = 0, self.n_channel
+            for k in self.l2_key:
+                data[k] = (out[2][:, start:stop] * self.l2_output_scale).squeeze()
+                start += self.n_channel
+                stop += self.n_channel
+           
+       
         return data 
 
     def __repr__(self):
