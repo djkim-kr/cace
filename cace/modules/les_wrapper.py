@@ -102,7 +102,7 @@ class LesWrapper(nn.Module):
 
         if hasattr(self, 'add_scalar_alpha') and self.add_scalar_alpha:
             alpha = data[self.alpha_key] if self.alpha_key in data else None
-            if alpha.dim() == 3 and alpha.shape[1] == 3 and alpha.shape[2] == 3:
+            if alpha is not None and alpha.dim() == 3 and alpha.shape[1] == 3 and alpha.shape[2] == 3:
                 desc = data[self.feature_key]
                 a2 = self.alpha_scalar_mlp(desc.reshape(desc.shape[0],-1)).squeeze() * self.scaling_factor_scalar_alpha
                 eye = torch.eye(3,device=a2.device)
