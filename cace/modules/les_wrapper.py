@@ -15,6 +15,7 @@ class LesWrapper(nn.Module):
                  energy_key: str = 'LES_energy',
                  charge_key: str = 'LES_charge',
                  dipole_key: str = None,
+                 quads_key: str = None,
                  kappa_key: str = None,
                  alpha_key: str = None,
                  atomic_number_key: str = None,
@@ -24,6 +25,7 @@ class LesWrapper(nn.Module):
                  bec_output_index: int = None, # option to compute BEC along one axis
                  make_alpha_positive: bool = False,
                  make_kappa_positive: bool = False,
+                 make_quads_traceless: bool = True,
                  add_scalar_alpha: bool = False,
                  scalar_alpha_mlp_sizes: Sequence[int] = [32, 16],
                  scaling_factor_scalar_alpha: float = 0.001,
@@ -45,12 +47,14 @@ class LesWrapper(nn.Module):
         self.energy_key = energy_key
         self.charge_key = charge_key
         self.dipole_key = dipole_key
+        self.quads_key = quads_key
         self.kappa_key = kappa_key
         self.alpha_key = alpha_key
         self.atomic_number_key = atomic_number_key
 
         self.make_alpha_positive = make_alpha_positive
         self.make_kappa_positive = make_kappa_positive
+        self.make_quads_traceless = make_quads_traceless
         self.add_scalar_alpha = add_scalar_alpha
         self.scaling_factor_scalar_alpha = scaling_factor_scalar_alpha
         if self.add_scalar_alpha:
@@ -114,10 +118,18 @@ class LesWrapper(nn.Module):
         if hasattr(self, 'make_kappa_positive') and self.make_kappa_positive:
             data[self.kappa_key] = data[self.kappa_key]**2
 
+        if hasattr(self, 'make_quads_traceless') and self.make_quads_traceless:
+            quads = data[self.quads_key] if self.quads_key in data else None
+            trace = torch.einsum("nii->n", quads)
+            eye = torch.eye(3, device=quads.device, dtype=quads.dtype)
+            quads = quads - (trace[:,None,None] * eye[None,:,:])/3
+            data[self.quads_key] = quads
+
         result = self.les(
             desc=features,
             latent_charges=data[self.charge_key] if features is None else None,
             latent_dipoles=data[self.dipole_key] if self.dipole_key is not None else None,
+            latent_quads=data[self.quads_key] if self.quads_key is not None else None,
             latent_alphas=data[self.alpha_key] if self.alpha_key is not None else None,
             latent_kappas=data[self.kappa_key] if self.kappa_key is not None else None,
             atomic_numbers=data[self.atomic_number_key] if hasattr(self, 'atomic_number_key') and  self.atomic_number_key is not None else None,
@@ -135,6 +147,8 @@ class LesWrapper(nn.Module):
             data[self.dipole_key] = result['latent_dipoles']
         if self.alpha_key is not None:
             data[self.alpha_key] = result['latent_alphas']
+        if self.quads_key is not None:
+            data[self.quads_key] = result['latent_quads']
 
         if self.compute_energy:
             data[self.energy_key] = result['E_lr']
