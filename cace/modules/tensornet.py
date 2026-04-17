@@ -2,8 +2,7 @@ import torch
 import torch.nn as nn
 from typing import Optional, Dict, List, Callable, Tuple, Union
 
-from .tensornet_utils import multi_outer_product
-from .tensornet_utils import _aggregate_new, expand_to, find_distances, find_moment, _scatter_add, single_tensor_product, layer_norm, normalize_tensors
+from .tensornet_utils import expand_to
 
 class TensorLinearMixing(nn.Module):
     def __init__(self,
@@ -23,44 +22,6 @@ class TensorLinearMixing(nn.Module):
             input_tensor = torch.transpose(input_tensors[l], 1, -1)
             output_tensor = linear(input_tensor)
             output_tensors[l] = torch.transpose(output_tensor, 1, -1)
-        return output_tensors
-
-class TensorProductLayer(nn.Module):
-    def __init__(self, nc,
-                 max_x_way      : int=2,
-                 max_y_way      : int=2,
-                 max_z_way      : int=2,
-                 zstack         : bool=False,
-                 stacking       : bool=False,
-                 ) -> None:
-        #lin, lr, lout
-        super().__init__()
-        self.stacking = stacking
-        self.zstack = zstack
-        self.combinations = []
-        for x_way in range(max_x_way + 1):
-            for y_way in range(max_y_way + 1):
-                for z_way in range(abs(y_way - x_way), min(max_z_way, x_way + y_way) + 1, 2):
-                    self.combinations.append((x_way, y_way, z_way))
-
-    def forward(self,
-                x : Dict[int, torch.Tensor],
-                y : Dict[int, torch.Tensor],
-                ) -> Dict[int, torch.Tensor]:
-        output_tensors = torch.jit.annotate(Dict[int, torch.Tensor], {})
-        for x_way, y_way, z_way in self.combinations:
-            if x_way not in x or y_way not in y:
-                continue
-            output_tensor = _aggregate_new(x[x_way], y[y_way], x_way, y_way, z_way)
-            if z_way not in output_tensors:
-                output_tensors[z_way] = output_tensor
-            else:
-                if self.stacking:
-                    output_tensors[z_way] = torch.hstack([output_tensors[z_way],output_tensor])
-                elif self.zstack and (z_way == 0):
-                    output_tensors[z_way] = torch.hstack([output_tensors[z_way],output_tensor])
-                else:
-                    output_tensors[z_way] += output_tensor
         return output_tensors
 
 class TensorActivationGate(nn.Module):
