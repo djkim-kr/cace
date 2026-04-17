@@ -21,59 +21,6 @@ def expand_to(t     : torch.Tensor,
     return t
 
 
-def multi_outer_product(v: torch.Tensor,
-                        n: int) -> torch.Tensor:
-    """Calculate 'n' times outer product of vector 'v'
-
-    Args:
-        v (torch.TensorType): vector or vectors ([n_dim] or [..., n_dim])
-        n (int): outer prodcut times, will return [...] 1 if n = 0
-
-    Returns:
-        torch.Tensor: OvO
-    """
-    out = torch.ones_like(v[..., 0]) #very slick, cool!
-    for _ in range(n):
-        out = out[..., None] * expand_to(v, len(out.shape) + 1, dim=len(v.shape) - 1)
-    return out
-
-
-def find_distances(data  : Dict[str, torch.Tensor],) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-    idx_i = data["edge_index"][0]
-    idx_j = data["edge_index"][1]
-    if 'rij' not in data:
-        data['rij'] = data['positions'][idx_j] - data['positions'][idx_i]
-    if 'dij' not in data:
-        data['dij'] = torch.norm(data['rij'], dim=-1)
-    if 'uij' not in data:
-        data['uij'] = data['rij'] / data['dij'].unsqueeze(-1)
-    return data['rij'], data['dij'], data['uij']
-
-
-def find_moment(batch_data  : Dict[str, torch.Tensor],
-                n_way       : int
-                ) -> torch.Tensor:
-    if 'moment' + str(n_way) not in batch_data:
-        find_distances(batch_data)
-        batch_data['moment' + str(n_way)] = multi_outer_product(batch_data['uij'], n_way)
-    return batch_data['moment' + str(n_way)]
-
-
-@torch.jit.script
-def _scatter_add(x        : torch.Tensor, 
-                 idx_i    : torch.Tensor, 
-                 dim_size : Optional[int]=None, 
-                 dim      : int = 0
-                 ) -> torch.Tensor:
-    shape = list(x.shape)
-    if dim_size is None:
-        dim_size = idx_i.max() + 1
-    shape[dim] = dim_size
-    tmp = torch.zeros(shape, dtype=x.dtype, device=x.device)
-    y = tmp.index_add(dim, idx_i, x)
-    return y
-
-
 @torch.jit.script
 def _aggregate_new(T1: torch.Tensor,
                    T2: torch.Tensor,
@@ -101,25 +48,3 @@ def single_tensor_product(x : torch.Tensor,
                          ) -> torch.Tensor:
         x_way, y_way, z_way = combination
         return _aggregate_new(x, y, x_way, y_way, z_way)
-
-
-@torch.jit.script
-def normalize_tensors(input_tensors : Dict[int, torch.Tensor]) -> Dict[int, torch.Tensor]:
-        output_tensors = torch.jit.annotate(Dict[int, torch.Tensor], {})
-        for l in input_tensors.keys():
-            input_tensor_ = input_tensors[l].reshape(input_tensors[l].shape[0], input_tensors[l].shape[1], -1)
-            factor = 1/(torch.sum(input_tensor_ ** 2, dim=2) + 1)
-            output_tensors[l] = expand_to(factor,l+2) * input_tensors[l]
-        return output_tensors
-
-@torch.jit.script
-def layer_norm(input_tensors : Dict[int, torch.Tensor],eps:float=1e-10) -> Dict[int, torch.Tensor]:
-        output_tensors = torch.jit.annotate(Dict[int, torch.Tensor], {})
-        input_tensors[0] = input_tensors[0] - input_tensors[0].mean(dim=-1)[:,None]
-        for l in input_tensors.keys():
-            input_tensor_ = input_tensors[l].reshape(input_tensors[l].shape[0], input_tensors[l].shape[1], -1)
-            rms = torch.sqrt(torch.sum(input_tensor_ ** 2,dim=-1).mean(dim=-1) + eps)
-            factor = (1/rms)
-            output_tensors[l] = expand_to(factor,l+2) * input_tensors[l]
-        return output_tensors
-
