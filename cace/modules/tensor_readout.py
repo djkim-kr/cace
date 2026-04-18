@@ -54,6 +54,15 @@ class TensorReadout(nn.Module):
         self.tensor_feed_forward = TensorFeedForward(tff_dim, lomax=max_l)
 
     def forward(self, data: Dict[str, torch.Tensor], **kwargs) -> Dict[str, torch.Tensor]:
+        if not hasattr(self, 'n_channel'):
+            self.n_channel = 1
+        if isinstance(self.l0_key, str):
+            self.l0_key = [self.l0_key]
+        if isinstance(self.l1_key, str):
+            self.l1_key = [self.l1_key]
+        if isinstance(self.l2_key, str):
+            self.l2_key = [self.l2_key]
+ 
         if self.feature_key not in data:
             raise ValueError(f"Feature key {self.feature_key} not found in data dictionary.")
         features = data[self.feature_key] #{0: l=0, 1:l=1, 2:l=2...}

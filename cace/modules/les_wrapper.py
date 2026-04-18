@@ -57,7 +57,7 @@ class LesWrapper(nn.Module):
         self.make_quad_traceless = make_quad_traceless
         self.add_scalar_alpha = add_scalar_alpha
         self.scaling_factor_scalar_alpha = scaling_factor_scalar_alpha
-        if self.add_scalar_alpha:
+        if alpha_key is not None and self.add_scalar_alpha:
             self.alpha_scalar_mlp = build_mlp(hidden_sizes=scalar_alpha_mlp_sizes)
 
         self.bec_key = bec_key
@@ -124,6 +124,9 @@ class LesWrapper(nn.Module):
             eye = torch.eye(3, device=quad.device, dtype=quad.dtype)
             quad = quad - (trace[:,None,None] * eye[None,:,:])/3
             data[self.quad_key] = quad
+
+        if not hasattr(self, 'quad_key'):
+            self.quad_key = None
 
         result = self.les(
             desc=features,
