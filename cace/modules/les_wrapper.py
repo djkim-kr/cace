@@ -109,13 +109,13 @@ class LesWrapper(nn.Module):
                 a2 = a2[:,None,None] * eye[None,:,:]
                 data[self.alpha_key] = data[self.alpha_key] + a2
 
-        if hasattr(self, 'make_alpha_positive') and self.make_alpha_positive:
+        if self.alpha_key is not None and hasattr(self, 'make_alpha_positive') and self.make_alpha_positive:
             alpha = data[self.alpha_key] if self.alpha_key in data else None
             if alpha.dim() == 2:
                 data[self.alpha_key] = alpha**2
             if alpha.dim() == 3 and alpha.shape[1] == 3 and alpha.shape[2] == 3:
                 data[self.alpha_key] = torch.einsum("nij,nkj->nik",alpha, alpha)
-        if hasattr(self, 'make_kappa_positive') and self.make_kappa_positive:
+        if self.kappa_key is not None and hasattr(self, 'make_kappa_positive') and self.make_kappa_positive:
             data[self.kappa_key] = data[self.kappa_key]**2
 
         if not hasattr(self, 'quad_key'):
