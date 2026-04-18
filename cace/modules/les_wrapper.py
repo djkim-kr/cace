@@ -118,15 +118,16 @@ class LesWrapper(nn.Module):
         if hasattr(self, 'make_kappa_positive') and self.make_kappa_positive:
             data[self.kappa_key] = data[self.kappa_key]**2
 
-        if hasattr(self, 'make_quad_traceless') and self.make_quad_traceless:
+        if not hasattr(self, 'quad_key'):
+            self.quad_key = None
+
+        if self.quad_key is not None and hasattr(self, 'make_quad_traceless') and self.make_quad_traceless:
             quad = data[self.quad_key] if self.quad_key in data else None
             trace = torch.einsum("nii->n", quad)
             eye = torch.eye(3, device=quad.device, dtype=quad.dtype)
             quad = quad - (trace[:,None,None] * eye[None,:,:])/3
             data[self.quad_key] = quad
 
-        if not hasattr(self, 'quad_key'):
-            self.quad_key = None
 
         result = self.les(
             desc=features,
