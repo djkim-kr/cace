@@ -117,7 +117,8 @@ class LesWrapper(nn.Module):
         if "external_field" in data.keys():
             e_ext = data["external_field"]
         else:
-            e_ext = torch.zeros_like(data["positions"][0])
+            #e_ext = torch.zeros_like(data["positions"][0])
+            e_ext = None 
 
         result = self.les(
             desc=features,
