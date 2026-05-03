@@ -87,6 +87,14 @@ class LesWrapper(nn.Module):
         self.bec_output_index = bec_output_index
 
     def forward(self, data: Dict[str, torch.Tensor], **kwargs) -> Dict[str, torch.Tensor]:
+        # set keys for backward compatibility
+        for key in ["alpha_key", "dipole_key", "quad_key", "kappa_key", "atomic_number_key"]:
+            if not hasattr(self, key):
+                setattr(self, key, None)
+        
+        for key in ["make_alpha_positive", "make_kappa_positive", "make_quad_traceless", "add_scalar_alpha"]:
+            if not hasattr(self, key):
+                setattr(self, key, False)
 
         # if charge key is already in data, we use the provided charges and skip the LES charge prediction
         if self.charge_key in data:
@@ -111,22 +119,20 @@ class LesWrapper(nn.Module):
 
         if self.alpha_key is not None and hasattr(self, 'make_alpha_positive') and self.make_alpha_positive:
             alpha = data[self.alpha_key] if self.alpha_key in data else None
-            if alpha.dim() == 2:
+            if alpha is not None and alpha.dim() == 2:
                 data[self.alpha_key] = alpha**2
-            if alpha.dim() == 3 and alpha.shape[1] == 3 and alpha.shape[2] == 3:
+            if alpha is not None and alpha.dim() == 3 and alpha.shape[1] == 3 and alpha.shape[2] == 3:
                 data[self.alpha_key] = torch.einsum("nij,nkj->nik",alpha, alpha)
-        if self.kappa_key is not None and hasattr(self, 'make_kappa_positive') and self.make_kappa_positive:
+        if self.kappa_key is not None and hasattr(self, 'make_kappa_positive') and self.make_kappa_positive: 
             data[self.kappa_key] = data[self.kappa_key]**2
-
-        if not hasattr(self, 'quad_key'):
-            self.quad_key = None
 
         if self.quad_key is not None and hasattr(self, 'make_quad_traceless') and self.make_quad_traceless:
             quad = data[self.quad_key] if self.quad_key in data else None
-            trace = torch.einsum("nii->n", quad)
-            eye = torch.eye(3, device=quad.device, dtype=quad.dtype)
-            quad = quad - (trace[:,None,None] * eye[None,:,:])/3
-            data[self.quad_key] = quad
+            if quad is not None:
+                trace = torch.einsum("nii->n", quad)
+                eye = torch.eye(3, device=quad.device, dtype=quad.dtype)
+                quad = quad - (trace[:,None,None] * eye[None,:,:])/3
+                data[self.quad_key] = quad
 
 
         result = self.les(
